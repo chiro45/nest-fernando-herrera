@@ -13,8 +13,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Product } from './entities/product.entity';
-import { paginationDto } from 'src/common/dtos/pagination.dto';
 import { validate } from 'uuid';
+import { paginationDto } from '../common/dtos/pagination.dto';
+import { ProductImage } from './entities/peoduct-image.entity';
 
 @Injectable()
 // 👆 Le dice a Nest que esta clase puede ser inyectada como dependencia
@@ -26,6 +27,8 @@ export class ProductsService {
     // Nest inyecta automáticamente el repositorio de Product
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+    @InjectRepository(ProductImage)
+    private readonly productImageRepository: Repository<ProductImage>,
   ) {}
 
   // ==========================
@@ -33,14 +36,20 @@ export class ProductsService {
   // ==========================
   async create(createProductDto: CreateProductDto) {
     try {
+      const { images = [], ...productDetails } = createProductDto;
       // Crea una instancia de Product a partir del DTO
-      const product = this.productRepository.create(createProductDto);
+      const product = this.productRepository.create({
+        ...productDetails,
+        images: images.map((image) =>
+          this.productImageRepository.create({ url: image }),
+        ),
+      });
 
       // Guarda el producto en la base de datos
       await this.productRepository.save(product);
 
       // Devuelve el producto ya persistido
-      return product;
+      return { ...product, images };
     } catch (error) {
       // Manejo centralizado de errores de base de datos
       this.handleDBExceptions(error);
@@ -53,13 +62,19 @@ export class ProductsService {
   // ==========================
   async findAll(paginationDto: paginationDto) {
     try {
-      const { limit = 0, offset = 0 } = paginationDto;
+      const { limit = 10, offset = 0 } = paginationDto;
       // Busca todos los productos en la base de datos
-      return await this.productRepository.find({
+      const products = await this.productRepository.find({
         take: limit,
         skip: offset,
-        //TODO:Relaciones
+        relations: {
+          images: true,
+        },
       });
+      return products.map(({ images, ...rest }) => ({
+        ...rest,
+        images: images?.map((image) => image.url),
+      }));
     } catch (error) {
       // Si ocurre un error, se maneja de forma centralizada
       this.handleDBExceptions(error);
@@ -101,10 +116,15 @@ export class ProductsService {
   // ACTUALIZAR PRODUCTO (PENDIENTE)
   // ==========================
   async update(id: string, updateProductDto: UpdateProductDto) {
+    const { images = [], ...productDetails } = updateProductDto;
+
     try {
       const product = await this.productRepository.preload({
         id: id,
-        ...updateProductDto,
+        ...productDetails,
+        images: images.map((image) =>
+          this.productImageRepository.create({ url: image }),
+        ),
       });
       if (!product)
         throw new NotFoundException(`Product with id: ${id} not found`);

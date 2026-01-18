@@ -3,8 +3,10 @@ import {
   BeforeUpdate,
   Column,
   Entity,
+  OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { ProductImage } from './peoduct-image.entity';
 
 @Entity()
 export class Product {
@@ -41,9 +43,14 @@ export class Product {
 
   @Column('text', {
     array: true,
-    default:[]
+    default: [],
   })
   tags: string[];
+
+  @OneToMany(() => ProductImage, (productImage) => productImage.product, {
+    cascade: true,//ayuda a que si un producto se elimina todas la imagenes estan asociadas se removerian
+  })
+  images?: ProductImage[];
 
   @BeforeInsert()
   checkSlugInsert() {
