@@ -94,12 +94,13 @@ export class ProductsService {
       //busca termino por slug
       //product = await this.productRepository.findOneBy({ slug: term });
       //usar querybuilder
-      const queryBuilder = this.productRepository.createQueryBuilder();
+      const queryBuilder = this.productRepository.createQueryBuilder('prod');
       product = await queryBuilder
         .where('UPPER(title) =:title or slug =:slug', {
           title: term.toUpperCase(),
           slug: term.toLocaleLowerCase(),
         })
+        .leftJoinAndSelect('prod.images', 'prodImages')
         .getOne();
     }
 
@@ -110,6 +111,14 @@ export class ProductsService {
 
     // Si existe, lo devuelve
     return product;
+  }
+
+  async findOnePlain(term: string) {
+    const { images, ...rest } = await this.findOne(term);
+    return {
+      ...rest,
+      images: images?.map((el) => el.url),
+    };
   }
 
   // ==========================
