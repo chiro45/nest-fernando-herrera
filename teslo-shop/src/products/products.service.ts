@@ -10,7 +10,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import { Product } from './entities/product.entity';
 import { validate } from 'uuid';
@@ -29,6 +29,8 @@ export class ProductsService {
     private readonly productRepository: Repository<Product>,
     @InjectRepository(ProductImage)
     private readonly productImageRepository: Repository<ProductImage>,
+
+    private readonly dataSource: DataSource,
   ) {}
 
   // ==========================
@@ -125,24 +127,46 @@ export class ProductsService {
   // ACTUALIZAR PRODUCTO (PENDIENTE)
   // ==========================
   async update(id: string, updateProductDto: UpdateProductDto) {
-    const { images = [], ...productDetails } = updateProductDto;
+    const { images, ...toUpdate } = updateProductDto;
 
     try {
       const product = await this.productRepository.preload({
-        id: id,
-        ...productDetails,
-        images: images.map((image) =>
-          this.productImageRepository.create({ url: image }),
-        ),
+        id,
+        ...toUpdate,
       });
+
       if (!product)
         throw new NotFoundException(`Product with id: ${id} not found`);
 
+      //create query runner
+      const queryRunner = this.dataSource.createQueryRunner();
+      //se conecta a la bd
+      await queryRunner.connect();
+      //inicia la transaccion
+      await queryRunner.startTransaction();
+
       try {
-        await this.productRepository.save(product);
-        return product;
+        //borramos las imagenes anteriores
+        if (images) {
+          //id del producto
+          await queryRunner.manager.delete(ProductImage, { product: { id } });
+          //asignamos las imagenes
+          product.images = images?.map((el) =>
+            this.productImageRepository.create({ url: el }),
+          );
+          await queryRunner.manager.save(product);
+        }
+        //its all okey the transaction is sucessfull
+        await queryRunner.commitTransaction();
+        //kill the query runner
+        await queryRunner.release();
+        return this.findOnePlain(id);
       } catch (error) {
         // Si ocurre un error, se maneja de forma centralizada
+        //rollback's trasaction
+        await queryRunner.rollbackTransaction();
+        //kill the query runner
+        await queryRunner.release();
         this.handleDBExceptions(error);
       }
     } catch (error) {
@@ -154,19 +178,18 @@ export class ProductsService {
   // ELIMINAR PRODUCTO
   // ==========================
   async remove(id: string) {
-    // 👉 this hace referencia a la instancia actual de ProductsService
-    // Es decir: este mismo objeto/clase.
-
-    // Llamamos al método findOne del MISMO servicio
-    // Es equivalente a hacer:
-    // productsService.findOne(id)
     const product = await this.findOne(id);
 
-    // Si findOne no encuentra el producto, ya lanzó un NotFoundException
-    // Por lo tanto, si llegamos acá, el producto existe.
-
-    // Eliminamos el producto de la base de datos
     await this.productRepository.remove(product);
+  }
+
+  async deleteAllProducts() {
+    const query = this.productRepository.createQueryBuilder('product');
+    try {
+      return await query.delete().where({}).execute();
+    } catch (error) {
+      this.handleDBExceptions(error);
+    }
   }
 
   // ==========================

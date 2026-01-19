@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 import { ProductImage } from './peoduct-image.entity';
 
-@Entity()
+@Entity({ name: 'products' })
 export class Product {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -48,7 +48,7 @@ export class Product {
   tags: string[];
 
   @OneToMany(() => ProductImage, (productImage) => productImage.product, {
-    cascade: true,//ayuda a que si un producto se elimina todas la imagenes estan asociadas se removerian
+    cascade: true, //ayuda a que si un producto se elimina todas la imagenes estan asociadas se removerian
   })
   images?: ProductImage[];
 
