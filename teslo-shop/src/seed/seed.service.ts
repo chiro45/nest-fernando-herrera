@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ProductsService } from '../products/products.service';
 import { initialData } from './data/data';
-import { Product } from '../products/entities/product.entity';
 
 @Injectable()
 export class SeedService {
